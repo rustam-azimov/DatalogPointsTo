@@ -1,0 +1,97 @@
+.type Var <: symbol
+.type Obj <: symbol
+.type Method <: symbol
+.type MethodInvocation <: symbol
+.type Order <: symbol
+
+/////////
+// EDB //
+/////////
+
+.decl Alloc(?var:Var, ?obj:Obj, ?meth:Method)
+.input Alloc
+.decl Assign(?to:Var, ?from:Var)
+.input Assign
+.decl SCall(?toMeth:Method, ?invo:MethodInvocation, ?inMeth:Method)
+.input SCall
+.decl ActualArg(?invo:MethodInvocation, ?i:Order, ?var:Var)
+.input ActualArg
+.decl FormalArg(?meth:Method, ?i:Order, ?var:Var)
+.input FormalArg
+.decl ActualReturn(?invo:MethodInvocation, ?var:Var)
+.input ActualReturn
+.decl FormalReturn(?meth:Method, ?var:Var)
+.input FormalReturn
+.decl MainMethod(?meth:Method)
+.input MainMethod
+
+/////////
+// IDB //
+/////////
+
+.decl VarPointsTo(?var:Var, ?ctx:MethodInvocation, ?obj:Obj)
+.output VarPointsTo
+.decl CallGraph(?invo:MethodInvocation, ?callerCtx:MethodInvocation, ?meth:Method, ?calleeCtx:MethodInvocation)
+.output CallGraph
+.decl Reachable(?meth:Method, ?ctx:MethodInvocation)
+.output Reachable
+.decl InterProcAssign(?to:Var, ?callerCtx:MethodInvocation, ?from:Var, ?calleeCtx:MethodInvocation)
+.output InterProcAssign
+
+/**
+ *  Variable points to heap object via assignment
+ */
+
+VarPointsTo(?var, ?ctx, ?obj) :-
+    Alloc(?var, ?obj, ?meth),
+    Reachable(?meth, ?ctx).
+
+/**
+ *  Local Assignments
+ */
+
+VarPointsTo(?to, ?ctx, ?obj) :-
+    Assign(?to, ?from),
+    VarPointsTo(?from, ?ctx, ?obj).
+
+/**
+ * Static calls
+ */
+
+Reachable(?toMeth, ?invo),
+CallGraph(?invo, ?callerCtx, ?toMeth, ?invo) :-
+    SCall(?toMeth, ?invo, ?inMeth),
+    Reachable(?inMeth, ?callerCtx).
+
+/**
+ * Parameter passing
+ */
+
+InterProcAssign(?to, ?calleeCtx, ?from, ?callerCtx) :-
+    CallGraph(?invo, ?callerCtx, ?meth, ?calleeCtx),
+    ActualArg(?invo, ?i, ?from),
+    FormalArg(?meth, ?i, ?to).
+
+/**
+ * Return value passing
+ */
+
+InterProcAssign(?to, ?callerCtx, ?from, ?calleeCtx) :-
+    CallGraph(?invo, ?callerCtx, ?meth, ?calleeCtx),
+    ActualReturn(?invo, ?to),
+    FormalReturn(?meth, ?from).
+
+/**
+ * Parameter/Result Passing as Assignment
+ */
+
+VarPointsTo(?to, ?toCtx, ?obj) :-
+    InterProcAssign(?to, ?toCtx, ?from, ?fromCtx),
+    VarPointsTo(?from, ?fromCtx, ?obj).
+
+/**
+ * Main method is reachable for sure
+ */
+
+Reachable(?meth, "main") :-
+    MainMethod(?meth).
